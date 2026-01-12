@@ -1,19 +1,13 @@
 #!/bin/bash
 
-# --- CHECK: BIST DU ROOT/SUDO? ---
-if [[ $EUID -ne 0 ]]; then
-   echo "Bitte starte das Skript mit sudo: sudo ./setup.sh"
-   exit 1
-fi
-
 # --- KONFIGURATION ---
-MC_USER=$(logname) # Der Benutzer, dem der Server gehören soll
 SESSION_NAME="minecraft"
-RAM="256G"
-THREADS="120"
+MC_USER=$(logname)
+RAM="240G"  # Etwas Puffer lassen
+THREADS="115"
 RADIUS=50000
 
-# Deine Mod-Links
+# Links
 URL_FORGE="https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-installer.jar"
 URL_CHUNKY="https://cdn.modrinth.com/data/fALzjamp/versions/4FTDk9wv/Chunky-1.3.146.jar"
 URL_BLUEMAP="https://cdn.modrinth.com/data/swbUV1cr/versions/aHbq9KFB/BlueMap-5.3-forge-1.20.jar"
@@ -24,20 +18,22 @@ URL_FERRITECORE="https://cdn.modrinth.com/data/uXXizFIs/versions/DG5Fn9Sz/ferrit
 URL_MODERNFIX="https://cdn.modrinth.com/data/nmDcB62a/versions/PbIMs8a8/modernfix-forge-5.25.1%2Bmc1.20.1.jar"
 URL_STARLIGHT="https://cdn.modrinth.com/data/iRfIGC1s/versions/cNa0vkNj/starlight-1.1.2%2Bforge.1cda73c.jar"
 
-echo "=== 1. INSTALLIERE SYSTEM-ABHÄNGIGKEITEN ==="
-apt update
-apt install -y openjdk-17-jdk screen wget curl htop
+# 1. Bereinigung und Vorbereitung
+echo "=== 1. VORBEREITUNG ==="
+# Wir arbeiten im aktuellen Verzeichnis
+WORK_DIR=$(pwd)
+chown $MC_USER:$MC_USER $WORK_DIR
 
-echo "=== 2. FORGE INSTALLATION ==="
-mkdir -p /home/$MC_USER/minecraft
-cd /home/$MC_USER/minecraft
-
+# 2. Forge Installation (Diesmal mit sichtbarem Output)
+echo "=== 2. FORGE INSTALLATION (Lade Bibliotheken...) ==="
 wget -q --show-progress -O forge-installer.jar "$URL_FORGE"
-java -jar forge-installer.jar --installServer > /dev/null
-echo "eula=true" > eula.txt
+# WICHTIG: Installation als MC_USER ausführen
+sudo -u $MC_USER java -jar forge-installer.jar --installServer | grep "Extracting"
 
-echo "=== 3. MODS DOWNLOAD ==="
-mkdir -p mods
+# 3. EULA & Mods
+echo "=== 3. MODS & CONFIG ==="
+echo "eula=true" > eula.txt
+mkdir -p mods config config/bluemap
 wget -q -O mods/chunky.jar "$URL_CHUNKY"
 wget -q -O mods/bluemap.jar "$URL_BLUEMAP"
 wget -q -O mods/biomesoplenty.jar "$URL_BOP"
@@ -47,80 +43,65 @@ wget -q -O mods/ferritecore.jar "$URL_FERRITECORE"
 wget -q -O mods/modernfix.jar "$URL_MODERNFIX"
 wget -q -O mods/starlight.jar "$URL_STARLIGHT"
 
-echo "=== 4. KONFIGURATION (PERFORMANCE & LARGE BIOMES) ==="
-# server.properties
-cat <<EOT > server.properties
-level-type=minecraft\:large_biomes
-max-tick-time=-1
-view-distance=12
-simulation-distance=10
-online-mode=true
-EOT
+# Configs schreiben
+echo "level-type=minecraft\:large_biomes" > server.properties
+echo "max-tick-time=-1" >> server.properties
 
-# C2ME Threads
-mkdir -p config
 cat <<EOT > config/c2me.toml
 version = 3
 [general]
     maxWorkerThreads = $THREADS
-[ioSystem]
-    asyncIO = true
-[threadingUtils]
-    useGlobalExecutor = true
 EOT
 
-# BlueMap Threads
-mkdir -p config/bluemap
 echo "accept-download: true" > config/bluemap/core.conf
 echo "render-thread-count: $THREADS" >> config/bluemap/core.conf
 
-# user_jvm_args.txt (Die offizielle Forge-Art RAM zu setzen)
-cat <<EOT > user_jvm_args.txt
--Xms$RAM
--Xmx$RAM
--XX:+UseG1GC
--XX:+ParallelRefProcEnabled
--XX:MaxGCPauseMillis=200
--XX:+UnlockExperimentalVMOptions
--XX:+DisableExplicitGC
--XX:+AlwaysPreTouch
--XX:G1NewSizePercent=40
--XX:G1MaxNewSizePercent=50
--XX:G1HeapRegionSize=32M
--XX:G1ReservePercent=15
--XX:G1HeapWastePercent=5
--XX:G1MixedGCCountTarget=4
--XX:InitiatingHeapOccupancyPercent=15
--XX:G1MixedGCLiveThresholdPercent=90
--XX:G1RSetUpdatingPauseTimePercent=5
--XX:SurvivorRatio=32
--XX:+PerfDisableSharedMem
--XX:MaxTenuringThreshold=1
--Dusing.aikars.flags=https://mcflags.emc.gs
--Daikars.new.flags=true
+# 4. Start-Skript erstellen
+echo "=== 4. ERSTELLE START-SKRIPT ==="
+cat <<EOT > start.sh
+#!/bin/bash
+java -Xms$RAM -Xmx$RAM \\
+  -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 \\
+  -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch \\
+  -XX:G1NewSizePercent=40 -XX:G1MaxNewSizePercent=50 -XX:G1HeapRegionSize=32M \\
+  -XX:InitiatingHeapOccupancyPercent=15 \\
+  -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true \\
+  @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt "\$@"
 EOT
+chmod +x start.sh
+chown $MC_USER:$MC_USER start.sh eula.txt server.properties
+chown -R $MC_USER:$MC_USER mods config libraries
 
-# Rechte an den User übertragen
-chown -R $MC_USER:$MC_USER /home/$MC_USER/minecraft
+# 5. Start im Screen
+echo "=== 5. STARTE SERVER ==="
+# Wir löschen alte Logs, um den Start sauber zu tracken
+rm -f logs/latest.log
+sudo -u $MC_USER screen -dmS $SESSION_NAME ./start.sh nogui
 
-echo "=== 5. STARTE SERVER IM SCREEN '$SESSION_NAME' ==="
-# Wir starten als der normale User, nicht als Root
-sudo -u $MC_USER screen -dmS $SESSION_NAME bash ./run.sh
+echo "Warte darauf, dass der Server bereit ist (log-scan)..."
+# Loop bis "Done" im Log erscheint
+timeout=300
+count=0
+while ! grep -q "Done" logs/latest.log 2>/dev/null; do
+    sleep 5
+    count=$((count+5))
+    echo -n "."
+    if [ $count -gt $timeout ]; then
+        echo "FEHLER: Server braucht zu lange zum Starten. Prüfe 'screen -r minecraft'"
+        exit 1
+    fi
+done
 
-echo "Warte 120 Sekunden auf Server-Boot..."
-sleep 120
-
-echo "Sende Chunky-Befehle an Konsole..."
+echo -e "\nServer ist ONLINE! Sende Chunky Befehle..."
 sudo -u $MC_USER screen -S $SESSION_NAME -p 0 -X stuff "chunky world minecraft:overworld$(printf '\r')"
-sleep 2
+sleep 1
 sudo -u $MC_USER screen -S $SESSION_NAME -p 0 -X stuff "chunky center 0 0$(printf '\r')"
-sleep 2
+sleep 1
 sudo -u $MC_USER screen -S $SESSION_NAME -p 0 -X stuff "chunky radius $RADIUS$(printf '\r')"
-sleep 2
+sleep 1
 sudo -u $MC_USER screen -S $SESSION_NAME -p 0 -X stuff "chunky start$(printf '\r')"
 
-echo "--------------------------------------------------------"
-echo "FERTIG! Der Server generiert jetzt im Hintergrund."
-echo "Konsole öffnen:  screen -r $SESSION_NAME"
-echo "Hardware-Check:  htop"
-echo "--------------------------------------------------------"
+echo "----------------------------------------------------"
+echo "ERFOLG: Chunky generiert jetzt."
+echo "Konsole öffnen: screen -r $SESSION_NAME"
+echo "----------------------------------------------------"
