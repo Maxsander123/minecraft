@@ -1,66 +1,73 @@
 #!/bin/bash
 
-# --- KONFIGURATION (Extreme Hardware: 128 Kerne / 300GB RAM) ---
+# --- KONFIGURATION (Extreme Specs: 128 Kerne, 300GB RAM) ---
 MC_VERSION="1.20.1"
 FORGE_VERSION="47.3.0"
-ALLOCATED_RAM="256G"   # 256GB für den Server
-THREADS_TO_USE="110"   # Wir lassen etwas Puffer für das System (128 Gesamt)
-RADIUS=50000           # 100.000 x 100.000 Blöcke Fläche
+ALLOCATED_RAM="256G"   # 256GB RAM für Java
+THREADS="120"          # 120 Threads für Weltgen & BlueMap
+RADIUS=50000           # Radius (Fläche von 100.000x100.000 Blöcken)
 
-# Download-URLs (Mods)
-FORGE_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/${MC_VERSION}-${FORGE_VERSION}/forge-${MC_VERSION}-${FORGE_VERSION}-installer.jar"
-CHUNKY_URL="https://cdn.modrinth.com/data/fALm0ZpS/versions/fALm0ZpS/Chunky-1.4.28.jar"
-BLUEMAP_URL="https://cdn.modrinth.com/data/swN6o9JI/versions/BNoWlXvK/BlueMap-3.21-forge-1.20.jar"
-BOP_URL="https://cdn.modrinth.com/data/idX9dbUf/versions/idX9dbUf/BiomesOPlenty-1.20.1-18.0.0.592.jar"
-TERRABLENDER_URL="https://cdn.modrinth.com/data/m797YI6X/versions/m797YI6X/TerraBlender-forge-1.20.1-3.0.1.7.jar"
+# DEINE LINKS
+URL_FORGE="https://maven.minecraftforge.net/net/minecraftforge/forge/${MC_VERSION}-${FORGE_VERSION}/forge-${MC_VERSION}-${FORGE_VERSION}-installer.jar"
+URL_CHUNKY="https://cdn.modrinth.com/data/fALzjamp/versions/4FTDk9wv/Chunky-1.3.146.jar"
+URL_BLUEMAP="https://cdn.modrinth.com/data/swbUV1cr/versions/aHbq9KFB/BlueMap-5.3-forge-1.20.jar"
+URL_BOP="https://cdn.modrinth.com/data/HXF82T3G/versions/jxUqRzSD/BiomesOPlenty-forge-1.20.1-19.0.0.96.jar"
+URL_TERRABLENDER="https://cdn.modrinth.com/data/kkmrDlKT/versions/zGconCHG/TerraBlender-forge-1.20.1-3.0.1.10.jar"
+URL_C2ME="https://cdn.modrinth.com/data/yE4MbG65/versions/h9trYS7V/c2meF-0.2.0%2Balpha.12-all.jar"
+URL_FERRITECORE="https://cdn.modrinth.com/data/uXXizFIs/versions/DG5Fn9Sz/ferritecore-6.0.1-forge.jar"
+URL_MODERNFIX="https://cdn.modrinth.com/data/nmDcB62a/versions/PbIMs8a8/modernfix-forge-5.25.1%2Bmc1.20.1.jar"
+URL_STARLIGHT="https://cdn.modrinth.com/data/iRfIGC1s/versions/cNa0vkNj/starlight-1.1.2%2Bforge.1cda73c.jar"
 
-# PERFORMANCE-MONSTER (C2ME für 128 Kerne, Canary, FerriteCore)
-C2ME_URL="https://mediafilez.forgecdn.net/files/5129/744/c2me-forge-mc1.20.1-0.2.0%2Balpha.11.jar" # Inoffizieller Port/Version
-CANARY_URL="https://cdn.modrinth.com/data/A7RjybD9/versions/vYw7x4m8/canary-mc1.20.1-0.3.3.jar"
-FERRITECORE_URL="https://cdn.modrinth.com/data/u6h9ZpRw/versions/A1S6m7lW/ferritecore-6.0.1-forge.jar"
-MODERNFIX_URL="https://cdn.modrinth.com/data/nmUakF6m/versions/H8YvD9M5/modernfix-forge-5.18.1+mc1.20.1.jar"
-
-echo "=== START: MASSIVE MULTI-CORE SETUP ==="
+echo "=== INITIALISIERE ULTRA-SERVER SETUP (128 KERNE) ==="
 
 # 1. Forge Installation
-wget -O forge-installer.jar "$FORGE_URL"
+echo "Lade Forge Installer..."
+wget -q --show-progress -O forge-installer.jar "$URL_FORGE"
 java -jar forge-installer.jar --installServer > /dev/null
 echo "eula=true" > eula.txt
 
-# 2. Mods herunterladen
+# 2. Mods Herunterladen
 mkdir -p mods
-wget -O mods/chunky.jar "$CHUNKY_URL"
-wget -O mods/bluemap.jar "$BLUEMAP_URL"
-wget -O mods/biomesoplenty.jar "$BOP_URL"
-wget -O mods/terrablender.jar "$TERRABLENDER_URL"
-wget -O mods/c2me.jar "$C2ME_URL"
-wget -O mods/canary.jar "$CANARY_URL"
-wget -O mods/ferritecore.jar "$FERRITECORE_URL"
-wget -O mods/modernfix.jar "$MODERNFIX_URL"
+echo "Lade Mods in den mods/ Ordner..."
+wget -q -O mods/chunky.jar "$URL_CHUNKY"
+wget -q -O mods/bluemap.jar "$URL_BLUEMAP"
+wget -q -O mods/biomesoplenty.jar "$URL_BOP"
+wget -q -O mods/terrablender.jar "$URL_TERRABLENDER"
+wget -q -O mods/c2me.jar "$URL_C2ME"
+wget -q -O mods/ferritecore.jar "$URL_FERRITECORE"
+wget -q -O mods/modernfix.jar "$URL_MODERNFIX"
+wget -q -O mods/starlight.jar "$URL_STARLIGHT"
 
-# 3. Welt-Konfiguration (Large Biomes)
-echo "level-type=minecraft\:large_biomes" > server.properties
-echo "max-tick-time=-1" >> server.properties # Wichtig: Verhindert Server-Shutdown bei 100% Last
+# 3. Server-Konfiguration (Large Biomes)
+echo "Konfiguriere server.properties..."
+cat <<EOT > server.properties
+level-type=minecraft\:large_biomes
+max-tick-time=-1
+view-distance=12
+simulation-distance=10
+max-players=100
+online-mode=true
+EOT
 
-# 4. BlueMap Multi-Thread Tuning
-mkdir -p config/bluemap
-echo "accept-download: true" > config/bluemap/core.conf
-echo "render-thread-count: $THREADS_TO_USE" >> config/bluemap/core.conf
-
-# 5. C2ME Konfiguration (Hier wird Multi-Core erzwungen)
+# 4. C2ME Multi-Core Tuning (Wichtig für 128 Kerne)
 mkdir -p config
 cat <<EOT > config/c2me.toml
 version = 3
 [general]
-    maxWorkerThreads = $THREADS_TO_USE
+    maxWorkerThreads = $THREADS
 [ioSystem]
     asyncIO = true
-    chunkDataUnloadQueue = true
 [threadingUtils]
     useGlobalExecutor = true
 EOT
 
-# 6. Start-Skript mit Profi-Flags (für 256GB RAM optimiert)
+# 5. BlueMap Tuning
+mkdir -p config/bluemap
+echo "accept-download: true" > config/bluemap/core.conf
+echo "render-thread-count: $THREADS" >> config/bluemap/core.conf
+
+# 6. Start-Skript (Optimiert für 256GB Heap)
+echo "Erstelle optimiertes Start-Skript..."
 cat <<EOT > start.sh
 #!/bin/bash
 java -Xms$ALLOCATED_RAM -Xmx$ALLOCATED_RAM \\
@@ -75,12 +82,14 @@ java -Xms$ALLOCATED_RAM -Xmx$ALLOCATED_RAM \\
 EOT
 chmod +x start.sh
 
-# 7. Server starten und Chunky befehlen
+# 7. Start in Screen & Chunky Automatisierung
+echo "Starte Server in Screen-Session 'minecraft'..."
 screen -dmS minecraft ./start.sh
-echo "Server startet... warte 120s (C2ME & Forge Initialisierung)..."
+
+echo "Warte 120 Sekunden auf Server-Boot (generiere erste Chunks)..."
 sleep 120
 
-# Chunky Befehle
+echo "Sende Chunky-Befehle für Pre-Generation (Radius $RADIUS)..."
 screen -S minecraft -p 0 -X stuff "chunky world minecraft:overworld$(printf '\r')"
 sleep 2
 screen -S minecraft -p 0 -X stuff "chunky center 0 0$(printf '\r')"
@@ -90,5 +99,6 @@ sleep 2
 screen -S minecraft -p 0 -X stuff "chunky start$(printf '\r')"
 
 echo "=== SETUP ABGESCHLOSSEN ==="
-echo "Monitoring mit: screen -r minecraft"
-echo "Prüfe CPU-Auslastung mit: top oder htop"
+echo "Status: Chunky generiert jetzt mit $THREADS Kernen."
+echo "Befehl zum Zuschauen: screen -r minecraft"
+echo "Befehl zum Verlassen der Ansicht: STRG+A, dann D"
