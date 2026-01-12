@@ -1,14 +1,13 @@
 #!/bin/bash
 
-# --- KONFIGURATION (Extreme Specs: 128 Kerne, 300GB RAM) ---
-MC_VERSION="1.20.1"
-FORGE_VERSION="47.3.0"
-ALLOCATED_RAM="256G"   # 256GB RAM für Java
-THREADS="120"          # 120 Threads für Weltgen & BlueMap
-RADIUS=50000           # Radius (Fläche von 100.000x100.000 Blöcken)
+# --- KONFIGURATION (Optimiert für 128 Kerne / 300GB RAM) ---
+SESSION_NAME="minecraft"
+RAM="256G"
+THREADS="120"   # Lässt 8 Kerne für OS-Hintergrundprozesse frei
+RADIUS=50000    # Entspricht 100.000 x 100.000 Blöcken
 
-# DEINE LINKS
-URL_FORGE="https://maven.minecraftforge.net/net/minecraftforge/forge/${MC_VERSION}-${FORGE_VERSION}/forge-${MC_VERSION}-${FORGE_VERSION}-installer.jar"
+# MOD-LINKS (Deine bereitgestellten Links)
+URL_FORGE="https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-installer.jar"
 URL_CHUNKY="https://cdn.modrinth.com/data/fALzjamp/versions/4FTDk9wv/Chunky-1.3.146.jar"
 URL_BLUEMAP="https://cdn.modrinth.com/data/swbUV1cr/versions/aHbq9KFB/BlueMap-5.3-forge-1.20.jar"
 URL_BOP="https://cdn.modrinth.com/data/HXF82T3G/versions/jxUqRzSD/BiomesOPlenty-forge-1.20.1-19.0.0.96.jar"
@@ -18,17 +17,17 @@ URL_FERRITECORE="https://cdn.modrinth.com/data/uXXizFIs/versions/DG5Fn9Sz/ferrit
 URL_MODERNFIX="https://cdn.modrinth.com/data/nmDcB62a/versions/PbIMs8a8/modernfix-forge-5.25.1%2Bmc1.20.1.jar"
 URL_STARLIGHT="https://cdn.modrinth.com/data/iRfIGC1s/versions/cNa0vkNj/starlight-1.1.2%2Bforge.1cda73c.jar"
 
-echo "=== INITIALISIERE ULTRA-SERVER SETUP (128 KERNE) ==="
+echo "=== STARTE SETUP IM SCREEN-MODUS ==="
 
 # 1. Forge Installation
-echo "Lade Forge Installer..."
+echo "-> Installiere Forge..."
 wget -q --show-progress -O forge-installer.jar "$URL_FORGE"
 java -jar forge-installer.jar --installServer > /dev/null
 echo "eula=true" > eula.txt
 
-# 2. Mods Herunterladen
+# 2. Mods Download
 mkdir -p mods
-echo "Lade Mods in den mods/ Ordner..."
+echo "-> Lade Mods..."
 wget -q -O mods/chunky.jar "$URL_CHUNKY"
 wget -q -O mods/bluemap.jar "$URL_BLUEMAP"
 wget -q -O mods/biomesoplenty.jar "$URL_BOP"
@@ -38,18 +37,13 @@ wget -q -O mods/ferritecore.jar "$URL_FERRITECORE"
 wget -q -O mods/modernfix.jar "$URL_MODERNFIX"
 wget -q -O mods/starlight.jar "$URL_STARLIGHT"
 
-# 3. Server-Konfiguration (Large Biomes)
-echo "Konfiguriere server.properties..."
-cat <<EOT > server.properties
-level-type=minecraft\:large_biomes
-max-tick-time=-1
-view-distance=12
-simulation-distance=10
-max-players=100
-online-mode=true
-EOT
+# 3. Konfiguration: Large Biomes & Performance
+echo "-> Erstelle Konfigurationen..."
+echo "level-type=minecraft\:large_biomes" > server.properties
+echo "max-tick-time=-1" >> server.properties
+echo "view-distance=12" >> server.properties
 
-# 4. C2ME Multi-Core Tuning (Wichtig für 128 Kerne)
+# C2ME Tuning für 120 Threads
 mkdir -p config
 cat <<EOT > config/c2me.toml
 version = 3
@@ -61,16 +55,15 @@ version = 3
     useGlobalExecutor = true
 EOT
 
-# 5. BlueMap Tuning
+# BlueMap Tuning für 120 Threads
 mkdir -p config/bluemap
 echo "accept-download: true" > config/bluemap/core.conf
 echo "render-thread-count: $THREADS" >> config/bluemap/core.conf
 
-# 6. Start-Skript (Optimiert für 256GB Heap)
-echo "Erstelle optimiertes Start-Skript..."
-cat <<EOT > start.sh
+# 4. Erstellung des Start-Skripts mit G1GC High-RAM Flags
+cat <<EOT > start_server.sh
 #!/bin/bash
-java -Xms$ALLOCATED_RAM -Xmx$ALLOCATED_RAM \\
+java -Xms$RAM -Xmx$RAM \\
   -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 \\
   -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch \\
   -XX:G1NewSizePercent=40 -XX:G1MaxNewSizePercent=50 -XX:G1HeapRegionSize=32M \\
@@ -78,27 +71,35 @@ java -Xms$ALLOCATED_RAM -Xmx$ALLOCATED_RAM \\
   -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 \\
   -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem \\
   -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true \\
-  -jar run.jar nogui
+  @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.3.0/unix_args.txt "\$@"
 EOT
-chmod +x start.sh
+chmod +x start_server.sh
 
-# 7. Start in Screen & Chunky Automatisierung
-echo "Starte Server in Screen-Session 'minecraft'..."
-screen -dmS minecraft ./start.sh
+# 5. SERVER IM SCREEN STARTEN
+echo "-> Starte Server in Screen-Session '$SESSION_NAME'..."
+screen -dmS $SESSION_NAME ./start_server.sh nogui
 
-echo "Warte 120 Sekunden auf Server-Boot (generiere erste Chunks)..."
+# 6. Automatisierung: Chunky Befehle in den Screen einspeisen
+echo "-> Warte 120 Sekunden auf den Server-Start..."
 sleep 120
 
-echo "Sende Chunky-Befehle für Pre-Generation (Radius $RADIUS)..."
-screen -S minecraft -p 0 -X stuff "chunky world minecraft:overworld$(printf '\r')"
+echo "-> Sende Chunky Befehle an Screen..."
+# Befehle werden nacheinander in die Screen-Konsole "getippt"
+screen -S $SESSION_NAME -p 0 -X stuff "chunky world minecraft:overworld$(printf '\r')"
 sleep 2
-screen -S minecraft -p 0 -X stuff "chunky center 0 0$(printf '\r')"
+screen -S $SESSION_NAME -p 0 -X stuff "chunky center 0 0$(printf '\r')"
 sleep 2
-screen -S minecraft -p 0 -X stuff "chunky radius $RADIUS$(printf '\r')"
+screen -S $SESSION_NAME -p 0 -X stuff "chunky radius $RADIUS$(printf '\r')"
 sleep 2
-screen -S minecraft -p 0 -X stuff "chunky start$(printf '\r')"
+screen -S $SESSION_NAME -p 0 -X stuff "chunky start$(printf '\r')"
 
-echo "=== SETUP ABGESCHLOSSEN ==="
-echo "Status: Chunky generiert jetzt mit $THREADS Kernen."
-echo "Befehl zum Zuschauen: screen -r minecraft"
-echo "Befehl zum Verlassen der Ansicht: STRG+A, dann D"
+echo "========================================================="
+echo " SETUP ABGESCHLOSSEN "
+echo "========================================================="
+echo "Der Server läuft jetzt im Screen '$SESSION_NAME'."
+echo ""
+echo "Befehle:"
+echo "  screen -r $SESSION_NAME   -> Konsole öffnen"
+echo "  STRG+A, dann D           -> Konsole wieder verlassen"
+echo "  htop                     -> CPU Last der 128 Kerne prüfen"
+echo "========================================================="
